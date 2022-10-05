@@ -1,4 +1,4 @@
-package ru.nsu.fit.kolesnik.tcpfiletransferapp.message;
+package ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol;
 
 public enum FileTransferMessageType {
     INIT((byte) 0), DATA((byte) 1), FIN((byte) 2), SUCCESS((byte) 3), FAILED((byte) 4);

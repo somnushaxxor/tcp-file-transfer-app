@@ -4,16 +4,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import ru.nsu.fit.kolesnik.tcpfiletransferapp.exception.FilePathTooLongException;
 import ru.nsu.fit.kolesnik.tcpfiletransferapp.exception.FileTooBigException;
-import ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessage;
-import ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessageType;
+import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage;
+import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessageType;
 
 import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-import static ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessage.receiveFileTransferMessage;
-import static ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessage.sendFileTransferMessage;
+import static ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage.receiveFileTransferMessage;
+import static ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage.sendFileTransferMessage;
 
 public class Client {
 
@@ -75,12 +75,14 @@ public class Client {
     }
 
     private void shutdown() {
+        logger.info("Closing connection with server");
         try {
             socket.close();
         } catch (IOException e) {
-            logger.error("Failed to shutdown client gracefully!");
+            logger.error("Failed to close client gracefully!");
             throw new RuntimeException(e);
         }
+        logger.info("Connection closed");
     }
 
 }

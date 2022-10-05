@@ -1,4 +1,4 @@
-package ru.nsu.fit.kolesnik.tcpfiletransferapp.message;
+package ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol;
 
 import lombok.Getter;
 

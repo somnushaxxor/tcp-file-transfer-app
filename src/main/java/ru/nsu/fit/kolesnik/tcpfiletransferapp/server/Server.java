@@ -46,6 +46,7 @@ public class Server {
                 throw new RuntimeException(e);
             }
         }
+        shutdown();
     }
 
     private void createUploadsDirectory() {
@@ -62,13 +63,17 @@ public class Server {
     }
 
     private void shutdown() {
+        logger.info("Closing server");
         threadPool.shutdown();
         try {
-            serverSocket.close();
+            if (!serverSocket.isClosed()) {
+                serverSocket.close();
+            }
         } catch (IOException e) {
-            logger.error("Failed to shutdown server gracefully!");
+            logger.error("Failed to close server gracefully!");
             throw new RuntimeException(e);
         }
+        logger.info("Server closed");
     }
 
 }

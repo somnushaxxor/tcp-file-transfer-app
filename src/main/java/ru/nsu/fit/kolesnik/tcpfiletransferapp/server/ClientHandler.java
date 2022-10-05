@@ -2,14 +2,14 @@ package ru.nsu.fit.kolesnik.tcpfiletransferapp.server;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessage;
-import ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessageType;
+import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage;
+import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessageType;
 
 import java.io.*;
 import java.net.Socket;
 
-import static ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessage.receiveFileTransferMessage;
-import static ru.nsu.fit.kolesnik.tcpfiletransferapp.message.FileTransferMessage.sendFileTransferMessage;
+import static ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage.receiveFileTransferMessage;
+import static ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage.sendFileTransferMessage;
 
 public class ClientHandler implements Runnable {
 
@@ -68,6 +68,7 @@ public class ClientHandler implements Runnable {
             }
             e.printStackTrace();
         }
+        shutdown();
     }
 
     private File createFile(String fileName) {
@@ -91,12 +92,14 @@ public class ClientHandler implements Runnable {
     }
 
     private void shutdown() {
+        logger.info("Closing connection with " + socket.getInetAddress().getHostAddress());
         try {
             socket.close();
         } catch (IOException e) {
-            logger.error("Failed to shutdown connection with " + socket.getInetAddress().getHostAddress() + " gracefully!");
+            logger.error("Failed to close connection with " + socket.getInetAddress().getHostAddress() + " gracefully!");
             throw new RuntimeException(e);
         }
+        logger.info("Connection closed");
     }
 
 }
