@@ -26,34 +26,86 @@ public class ClientHandler implements Runnable {
     private final Socket socket;
     private final ScheduledExecutorService scheduledExecutorService;
     private final Lock lock;
+    private File downloadingFile;
     private long bytesReceivedWithinPeriod;
+    private long totalBytesReceived;
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
         scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
         lock = new ReentrantLock();
         bytesReceivedWithinPeriod = 0;
+        totalBytesReceived = 0;
     }
 
     @Override
     public void run() {
-        scheduledExecutorService.scheduleAtFixedRate(this::countFileReceivingSpeed, SPEED_COUNT_PERIOD, SPEED_COUNT_PERIOD,
-                TimeUnit.SECONDS);
-        receiveFile();
-    }
-
-    private void receiveFile() {
-        logger.info("Receiving file from " + socket.getInetAddress().getHostAddress());
-        Instant start = Instant.now();
         try (DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
              DataInputStream dataInputStream = new DataInputStream(socket.getInputStream())) {
+            logger.info("Initializing file download from " + socket.getInetAddress().getHostAddress() + "...");
+            long requiredBytesNumber = initializeFileDownload(dataInputStream);
+            logger.info("File download initialized");
+            scheduledExecutorService.scheduleAtFixedRate(this::countFileDownloadSpeed, SPEED_COUNT_PERIOD,
+                    SPEED_COUNT_PERIOD, TimeUnit.SECONDS);
+            logger.info("Downloading file from " + socket.getInetAddress().getHostAddress() + "...");
+            Instant begin = Instant.now();
+            boolean fileDownloadedSuccessfully = downloadFile(requiredBytesNumber, dataOutputStream, dataInputStream);
+            Instant end = Instant.now();
+            logger.info("File download finished");
+            scheduledExecutorService.shutdown();
+            if (fileDownloadedSuccessfully) {
+                logger.info("File downloaded successfully");
+            } else {
+                logger.error("File download failed! Server did not receive whole file!");
+            }
+            printAverageDownloadSpeed(begin, end);
+        } catch (IOException e) {
+            logger.error("Error occurred while handling client " + socket.getInetAddress().getHostAddress() + "!");
+            shutdown();
+            throw new RuntimeException(e);
+        }
+        shutdown();
+    }
 
-            FileTransferMessage initializingMessage = receiveFileTransferMessage(dataInputStream);
-            File file = createFile(initializingMessage.getFileName());
+    private long initializeFileDownload(DataInputStream dataInputStream) {
+        FileTransferMessage initializingMessage;
+        try {
+            initializingMessage = receiveFileTransferMessage(dataInputStream);
+        } catch (IOException e) {
+            logger.error("Error occurred while initializing file download!");
+            shutdown();
+            throw new RuntimeException(e);
+        }
+        downloadingFile = createDownloadingFile(initializingMessage.getFileName());
+        return initializingMessage.getFileSize();
+    }
 
-            FileOutputStream fileOutputStream = new FileOutputStream(file);
+    private File createDownloadingFile(String fileName) {
+        File file;
+        boolean fileCreated;
+        String prefix = "";
+        int i = 0;
+        do {
+            file = new File("./" + Server.UPLOADS_DIRECTORY_NAME + "/" + prefix + fileName);
+            try {
+                fileCreated = file.createNewFile();
+            } catch (IOException e) {
+                shutdown();
+                throw new RuntimeException(e);
+            }
+            if (i > 0) {
+                prefix = "copy" + i + "_";
+            } else {
+                prefix = "copy_";
+            }
+            i++;
+        } while (!fileCreated);
+        return file;
+    }
 
-            long totalBytesReceived = 0;
+    private boolean downloadFile(long requiredBytesNumber, DataOutputStream dataOutputStream,
+                                 DataInputStream dataInputStream) {
+        try (FileOutputStream fileOutputStream = new FileOutputStream(downloadingFile)) {
             boolean receiving = true;
             while (receiving) {
                 FileTransferMessage message = receiveFileTransferMessage(dataInputStream);
@@ -68,65 +120,48 @@ public class ClientHandler implements Runnable {
                     case FIN -> receiving = false;
                 }
             }
-            scheduledExecutorService.shutdown();
-            if (initializingMessage.getFileSize() == totalBytesReceived) {
-                logger.info("File transfer succeeded");
-                Instant end = Instant.now();
-                logger.info("Average file receiving speed: "
-                        + totalBytesReceived * 1000 / (end.toEpochMilli() - start.toEpochMilli()) + " bytes/s");
+            if (requiredBytesNumber == totalBytesReceived) {
                 sendFileTransferMessage(new FileTransferMessage(FileTransferMessageType.SUCCESS), dataOutputStream);
+                return true;
             } else {
-                logger.error("File transfer failed! Server did not receive whole file!");
                 sendFileTransferMessage(new FileTransferMessage(FileTransferMessageType.FAILED), dataOutputStream);
+                return false;
             }
-            fileOutputStream.close();
         } catch (IOException e) {
-            scheduledExecutorService.shutdown();
+            logger.error("Failed to download file from " + socket.getInetAddress().getHostAddress() + "!");
             shutdown();
-            logger.error("Failed to receive file from " + socket.getInetAddress().getHostAddress());
-            e.printStackTrace();
+            throw new RuntimeException(e);
+        } catch (RuntimeException e) {
+            logger.error("Server internal error occurred!");
+            logger.error("Failed to download file from " + socket.getInetAddress().getHostAddress() + "!");
+            shutdown();
+            throw e;
         }
-        shutdown();
     }
 
-    private File createFile(String fileName) {
-        File file;
-        boolean fileCreated;
-        String prefix = "";
-        int i = 0;
-        do {
-            file = new File("./" + Server.UPLOADS_DIRECTORY_NAME + "/" + prefix + fileName);
-            try {
-                fileCreated = file.createNewFile();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            if (i > 0) {
-                prefix = "copy" + i + "_";
-            } else {
-                prefix = "copy_";
-            }
-            i++;
-        } while (!fileCreated);
-        return file;
-    }
-
-    private void countFileReceivingSpeed() {
+    private void countFileDownloadSpeed() {
         lock.lock();
-        logger.info("Current file receiving speed: " + bytesReceivedWithinPeriod / SPEED_COUNT_PERIOD + " bytes/s");
+        logger.info("Current file download speed: " + bytesReceivedWithinPeriod / SPEED_COUNT_PERIOD + " bytes/s");
         bytesReceivedWithinPeriod = 0;
         lock.unlock();
     }
 
+    private void printAverageDownloadSpeed(Instant begin, Instant end) {
+        logger.info("Average file download speed: "
+                + totalBytesReceived * 1000 / (end.toEpochMilli() - begin.toEpochMilli()) + " bytes/s");
+    }
+
     private void shutdown() {
-        logger.info("Closing connection with " + socket.getInetAddress().getHostAddress());
+        scheduledExecutorService.shutdown();
+        logger.info("Shutting connection with " + socket.getInetAddress().getHostAddress() + " down");
         try {
             socket.close();
         } catch (IOException e) {
-            logger.error("Failed to close connection with " + socket.getInetAddress().getHostAddress() + " gracefully!");
+            logger.error("Failed to shutdown connection with " + socket.getInetAddress().getHostAddress()
+                    + " gracefully!");
             throw new RuntimeException(e);
         }
-        logger.info("Connection closed");
+        logger.info("Connection with " + socket.getInetAddress().getHostAddress() + " shutdown");
     }
 
 }

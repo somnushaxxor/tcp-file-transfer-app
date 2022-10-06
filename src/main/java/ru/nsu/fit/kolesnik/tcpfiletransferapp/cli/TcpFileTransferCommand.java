@@ -14,15 +14,15 @@ public class TcpFileTransferCommand implements Runnable {
 
     private static final Logger logger = LogManager.getLogger(TcpFileTransferCommand.class);
 
-    @Command(name = "server", description = "Initializes server")
-    public void initializeServer(
+    @Command(name = "server", description = "Starts server")
+    public void startServer(
             @Option(names = {"--port"}, description = "server port", paramLabel = "<port>", required = true) int port) {
         Server server = new Server(port);
         server.start();
     }
 
-    @Command(name = "client", description = "Initializes client")
-    public void initializeClient(
+    @Command(name = "client", description = "Starts client")
+    public void startClient(
             @Option(names = {"--path"}, description = "file path", paramLabel = "<path>", required = true) String filePath,
             @Option(names = {"--hostname"}, description = "server hostname", paramLabel = "<hostname>", required = true)
             String serverHostname,

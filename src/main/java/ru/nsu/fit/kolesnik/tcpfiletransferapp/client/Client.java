@@ -22,15 +22,16 @@ public class Client {
 
     private static final Logger logger = LogManager.getLogger(Client.class);
 
-    private final File outgoingFile;
+    private final File uploadingFile;
     private final Socket socket;
 
-    public Client(String filePath, String serverHostname, int serverPort) throws FilePathTooLongException, FileTooBigException {
-        outgoingFile = new File(filePath);
+    public Client(String filePath, String serverHostname, int serverPort) throws FilePathTooLongException,
+            FileTooBigException {
+        uploadingFile = new File(filePath);
         if (filePath.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_PATH_UTF8_LENGTH) {
             throw new FilePathTooLongException();
         }
-        if (outgoingFile.length() > MAX_FILE_SIZE) {
+        if (uploadingFile.length() > MAX_FILE_SIZE) {
             throw new FileTooBigException();
         }
         try {
@@ -43,14 +44,43 @@ public class Client {
     }
 
     public void start() {
-        logger.info("Sending file to server");
-        try (FileInputStream fileInputStream = new FileInputStream(outgoingFile);
+        try (FileInputStream fileInputStream = new FileInputStream(uploadingFile);
              DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
              DataInputStream dataInputStream = new DataInputStream(socket.getInputStream())) {
+            logger.info("Initializing file upload...");
+            initializeFileUpload(dataOutputStream);
+            logger.info("File upload initialized");
+            logger.info("Uploading file to server...");
+            boolean fileUploadedSuccessfully = uploadFile(fileInputStream, dataOutputStream, dataInputStream);
+            logger.info("File upload finished");
+            if (fileUploadedSuccessfully) {
+                logger.info("File uploaded successfully");
+            } else {
+                logger.error("File upload failed! Server did not receive whole file!");
+            }
+        } catch (IOException e) {
+            logger.error("Error occurred while starting client!");
+            shutdown();
+            throw new RuntimeException(e);
+        }
+        shutdown();
+    }
 
-            FileTransferMessage initializingMessage = new FileTransferMessage(FileTransferMessageType.INIT, outgoingFile.getName(),
-                    outgoingFile.length());
-            sendFileTransferMessage(initializingMessage, dataOutputStream);
+    private void initializeFileUpload(DataOutputStream dataOutputStream) {
+        FileTransferMessage transferInitializingMessage = new FileTransferMessage(FileTransferMessageType.INIT,
+                uploadingFile.getName(), uploadingFile.length());
+        try {
+            sendFileTransferMessage(transferInitializingMessage, dataOutputStream);
+        } catch (IOException e) {
+            logger.error("Error occurred while initializing file upload!");
+            shutdown();
+            throw new RuntimeException(e);
+        }
+    }
+
+    private boolean uploadFile(FileInputStream fileInputStream, DataOutputStream dataOutputStream,
+                               DataInputStream dataInputStream) {
+        try {
             byte[] buffer = new byte[FileTransferMessage.MAX_DATA_SIZE];
             int bytesRead;
             while ((bytesRead = fileInputStream.read(buffer, 0, FileTransferMessage.MAX_DATA_SIZE)) != -1) {
@@ -58,31 +88,29 @@ public class Client {
                 FileTransferMessage dataMessage = new FileTransferMessage(FileTransferMessageType.DATA, data);
                 sendFileTransferMessage(dataMessage, dataOutputStream);
             }
-            FileTransferMessage finMessage = new FileTransferMessage(FileTransferMessageType.FIN);
-            sendFileTransferMessage(finMessage, dataOutputStream);
+
+            FileTransferMessage transferFinalizingMessage = new FileTransferMessage(FileTransferMessageType.FIN);
+            sendFileTransferMessage(transferFinalizingMessage, dataOutputStream);
 
             FileTransferMessage transferResultMessage = receiveFileTransferMessage(dataInputStream);
-            switch (transferResultMessage.getType()) {
-                case SUCCESS -> logger.info("File transfer succeeded");
-                case FAILED -> logger.error("File transfer failed! Server did not receive whole file!");
-            }
+
+            return transferResultMessage.getType() == FileTransferMessageType.SUCCESS;
         } catch (IOException e) {
-            logger.error("Error occurred while sending file!");
+            logger.error("Error occurred while uploading file!");
             shutdown();
             throw new RuntimeException(e);
         }
-        shutdown();
     }
 
     private void shutdown() {
-        logger.info("Closing connection with server");
+        logger.info("Shutting client down");
         try {
             socket.close();
         } catch (IOException e) {
-            logger.error("Failed to close client gracefully!");
+            logger.error("Failed to shutdown client gracefully!");
             throw new RuntimeException(e);
         }
-        logger.info("Connection closed");
+        logger.info("Client shutdown");
     }
 
 }

@@ -25,7 +25,7 @@ public class Server {
         try {
             serverSocket = new ServerSocket(port);
         } catch (IOException e) {
-            logger.error("Could not initialize server!");
+            logger.error("Could not create server!");
             throw new RuntimeException(e);
         }
         threadPool = Executors.newCachedThreadPool();
@@ -58,22 +58,23 @@ public class Server {
             }
         } catch (IOException e) {
             logger.error("Error occurred while creating uploads directory!");
+            shutdown();
             throw new RuntimeException(e);
         }
     }
 
     private void shutdown() {
-        logger.info("Closing server");
+        logger.info("Shutting server down");
         threadPool.shutdown();
         try {
             if (!serverSocket.isClosed()) {
                 serverSocket.close();
             }
         } catch (IOException e) {
-            logger.error("Failed to close server gracefully!");
+            logger.error("Failed to shutdown server gracefully!");
             throw new RuntimeException(e);
         }
-        logger.info("Server closed");
+        logger.info("Server shutdown");
     }
 
 }
