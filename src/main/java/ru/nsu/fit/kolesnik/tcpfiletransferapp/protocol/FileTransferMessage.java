@@ -39,7 +39,7 @@ public class FileTransferMessage {
 
     public FileTransferMessage(byte[] bytes) {
         ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
-        type = FileTransferMessageType.getByCode(byteBuffer.get());
+        type = FileTransferMessageType.values()[byteBuffer.getInt()];
         switch (type) {
             case INIT -> {
                 fileNameUtf8Size = byteBuffer.getInt();
@@ -59,22 +59,22 @@ public class FileTransferMessage {
     public byte[] getBytes() {
         switch (type) {
             case INIT -> {
-                return ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + fileNameUtf8Size + Long.BYTES)
-                        .put(type.getByte())
+                return ByteBuffer.allocate(Integer.BYTES + Integer.BYTES + fileNameUtf8Size + Long.BYTES)
+                        .putInt(type.ordinal())
                         .putInt(fileNameUtf8Size)
                         .put(fileName.getBytes(StandardCharsets.UTF_8))
                         .putLong(fileSize)
                         .array();
             }
             case DATA -> {
-                return ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + dataSize)
-                        .put(type.getByte())
+                return ByteBuffer.allocate(Integer.BYTES + Integer.BYTES + dataSize)
+                        .putInt(type.ordinal())
                         .putInt(dataSize)
                         .put(data)
                         .array();
             }
             default -> {
-                return ByteBuffer.allocate(Byte.BYTES).put(type.getByte()).array();
+                return ByteBuffer.allocate(Integer.BYTES).putInt(type.ordinal()).array();
             }
         }
     }
@@ -89,7 +89,7 @@ public class FileTransferMessage {
     public static FileTransferMessage receiveFileTransferMessage(DataInputStream inputStream) throws IOException {
         int messageSize = inputStream.readInt();
         byte[] messageBytes = new byte[messageSize];
-        inputStream.read(messageBytes, 0, messageSize);
+        inputStream.readFully(messageBytes, 0, messageSize);
         return new FileTransferMessage(messageBytes);
     }
 
