@@ -7,6 +7,7 @@ import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessageType;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -103,6 +104,14 @@ public class ClientHandler implements Runnable {
         return file;
     }
 
+    private void deleteDownloadingFile() {
+        try {
+            Files.delete(downloadingFile.toPath());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private boolean downloadFile(long requiredBytesNumber, DataOutputStream dataOutputStream,
                                  DataInputStream dataInputStream) {
         try (FileOutputStream fileOutputStream = new FileOutputStream(downloadingFile)) {
@@ -124,16 +133,19 @@ public class ClientHandler implements Runnable {
                 sendFileTransferMessage(new FileTransferMessage(FileTransferMessageType.SUCCESS), dataOutputStream);
                 return true;
             } else {
+                deleteDownloadingFile();
                 sendFileTransferMessage(new FileTransferMessage(FileTransferMessageType.FAILED), dataOutputStream);
                 return false;
             }
         } catch (IOException e) {
             logger.error("Failed to download file from " + socket.getInetAddress().getHostAddress() + "!");
+            deleteDownloadingFile();
             shutdown();
             throw new RuntimeException(e);
         } catch (RuntimeException e) {
             logger.error("Server internal error occurred!");
             logger.error("Failed to download file from " + socket.getInetAddress().getHostAddress() + "!");
+            deleteDownloadingFile();
             shutdown();
             throw e;
         }
