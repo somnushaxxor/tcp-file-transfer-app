@@ -14,46 +14,27 @@ public class FileTransferMessage {
     public final static int MAX_DATA_SIZE = 32768;
 
     private final FileTransferMessageType type;
-    private Integer fileNameUtf8Size;
+    private int fileNameUtf8Size;
     private String fileName;
-    private Long fileSize;
-    private Integer dataSize;
+    private long fileSize;
+    private int dataSize;
     private byte[] data;
 
     public FileTransferMessage(FileTransferMessageType type) {
         this.type = type;
     }
 
-    public FileTransferMessage(FileTransferMessageType type, String fileName, long fileSize) {
+    public FileTransferMessage(FileTransferMessageType type, int fileNameUtf8Size, String fileName, long fileSize) {
         this.type = type;
-        fileNameUtf8Size = fileName.getBytes(StandardCharsets.UTF_8).length;
+        this.fileNameUtf8Size = fileNameUtf8Size;
         this.fileName = fileName;
         this.fileSize = fileSize;
     }
 
-    public FileTransferMessage(FileTransferMessageType type, byte[] data) {
+    public FileTransferMessage(FileTransferMessageType type, int dataSize, byte[] data) {
         this.type = type;
-        dataSize = data.length;
+        this.dataSize = dataSize;
         this.data = data;
-    }
-
-    public FileTransferMessage(byte[] bytes) {
-        ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
-        type = FileTransferMessageType.values()[byteBuffer.getInt()];
-        switch (type) {
-            case INIT -> {
-                fileNameUtf8Size = byteBuffer.getInt();
-                byte[] fileNameUtf8Bytes = new byte[fileNameUtf8Size];
-                byteBuffer.get(fileNameUtf8Bytes, 0, fileNameUtf8Size);
-                fileName = new String(fileNameUtf8Bytes, StandardCharsets.UTF_8);
-                fileSize = byteBuffer.getLong();
-            }
-            case DATA -> {
-                dataSize = byteBuffer.getInt();
-                data = new byte[dataSize];
-                byteBuffer.get(data, 0, dataSize);
-            }
-        }
     }
 
     public byte[] getBytes() {
@@ -81,16 +62,31 @@ public class FileTransferMessage {
 
     public static void sendFileTransferMessage(FileTransferMessage message, DataOutputStream outputStream) throws IOException {
         byte[] messageBytes = message.getBytes();
-        outputStream.writeInt(messageBytes.length);
         outputStream.write(messageBytes);
         outputStream.flush();
     }
 
     public static FileTransferMessage receiveFileTransferMessage(DataInputStream inputStream) throws IOException {
-        int messageSize = inputStream.readInt();
-        byte[] messageBytes = new byte[messageSize];
-        inputStream.readFully(messageBytes, 0, messageSize);
-        return new FileTransferMessage(messageBytes);
+        FileTransferMessageType type = FileTransferMessageType.values()[inputStream.readInt()];
+        switch (type) {
+            case INIT -> {
+                int fileNameUtf8Size = inputStream.readInt();
+                byte[] fileNameUtf8Bytes = new byte[fileNameUtf8Size];
+                inputStream.readFully(fileNameUtf8Bytes);
+                String fileName = new String(fileNameUtf8Bytes, StandardCharsets.UTF_8);
+                long fileSize = inputStream.readLong();
+                return new FileTransferMessage(type, fileNameUtf8Size, fileName, fileSize);
+            }
+            case DATA -> {
+                int dataSize = inputStream.readInt();
+                byte[] data = new byte[dataSize];
+                inputStream.readFully(data);
+                return new FileTransferMessage(type, dataSize, data);
+            }
+            default -> {
+                return new FileTransferMessage(type);
+            }
+        }
     }
 
 }

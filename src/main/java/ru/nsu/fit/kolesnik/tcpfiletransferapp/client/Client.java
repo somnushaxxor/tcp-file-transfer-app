@@ -68,7 +68,8 @@ public class Client {
 
     private void initializeFileUpload(DataOutputStream dataOutputStream) {
         FileTransferMessage transferInitializingMessage = new FileTransferMessage(FileTransferMessageType.INIT,
-                uploadingFile.getName(), uploadingFile.length());
+                uploadingFile.getName().getBytes(StandardCharsets.UTF_8).length, uploadingFile.getName(),
+                uploadingFile.length());
         try {
             sendFileTransferMessage(transferInitializingMessage, dataOutputStream);
         } catch (IOException e) {
@@ -85,7 +86,8 @@ public class Client {
             int bytesRead;
             while ((bytesRead = fileInputStream.read(buffer, 0, FileTransferMessage.MAX_DATA_SIZE)) != -1) {
                 byte[] data = Arrays.copyOfRange(buffer, 0, bytesRead);
-                FileTransferMessage dataMessage = new FileTransferMessage(FileTransferMessageType.DATA, data);
+                FileTransferMessage dataMessage = new FileTransferMessage(FileTransferMessageType.DATA, data.length,
+                        data);
                 sendFileTransferMessage(dataMessage, dataOutputStream);
             }
 
