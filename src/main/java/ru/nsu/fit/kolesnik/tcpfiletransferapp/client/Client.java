@@ -2,8 +2,6 @@ package ru.nsu.fit.kolesnik.tcpfiletransferapp.client;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import ru.nsu.fit.kolesnik.tcpfiletransferapp.exception.FilePathTooLongException;
-import ru.nsu.fit.kolesnik.tcpfiletransferapp.exception.FileTooBigException;
 import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage;
 import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessageType;
 
@@ -25,14 +23,15 @@ public class Client {
     private final File uploadingFile;
     private final Socket socket;
 
-    public Client(String filePath, String serverHostname, int serverPort) throws FilePathTooLongException,
-            FileTooBigException {
+    public Client(String filePath, String serverHostname, int serverPort) {
         uploadingFile = new File(filePath);
         if (filePath.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_PATH_UTF8_LENGTH) {
-            throw new FilePathTooLongException();
+            logger.error("File path is too long!");
+            throw new IllegalArgumentException("File path is too long!");
         }
         if (uploadingFile.length() > MAX_FILE_SIZE) {
-            throw new FileTooBigException();
+            logger.error("File is too big!");
+            throw new IllegalArgumentException("File is too big!");
         }
         try {
             socket = new Socket(serverHostname, serverPort);
