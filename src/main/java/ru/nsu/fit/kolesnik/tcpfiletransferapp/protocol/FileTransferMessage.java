@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 @Getter
 public class FileTransferMessage {
 
-    public final static int MAX_DATA_SIZE = 32768;
+    public static final int MAX_DATA_SIZE = 32768;
 
     private final FileTransferMessageType type;
     private int fileNameUtf8Size;

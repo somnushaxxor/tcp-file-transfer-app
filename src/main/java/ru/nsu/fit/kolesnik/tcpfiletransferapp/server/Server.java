@@ -2,6 +2,7 @@ package ru.nsu.fit.kolesnik.tcpfiletransferapp.server;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import ru.nsu.fit.kolesnik.tcpfiletransferapp.server.handler.ClientHandler;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -26,7 +27,7 @@ public class Server {
             serverSocket = new ServerSocket(port);
         } catch (IOException e) {
             logger.error("Could not create server!");
-            throw new RuntimeException(e);
+            throw new ServerException("Could not create server!", e);
         }
         threadPool = Executors.newCachedThreadPool();
         createUploadsDirectory();
@@ -43,7 +44,7 @@ public class Server {
             } catch (IOException e) {
                 logger.error("Error occurred while waiting for new connection!");
                 shutdown();
-                throw new RuntimeException(e);
+                throw new ServerException("Error occurred while waiting for new connection!", e);
             }
         }
         shutdown();
@@ -59,7 +60,7 @@ public class Server {
         } catch (IOException e) {
             logger.error("Error occurred while creating uploads directory!");
             shutdown();
-            throw new RuntimeException(e);
+            throw new ServerException("Error occurred while creating uploads directory!", e);
         }
     }
 
@@ -72,7 +73,7 @@ public class Server {
             }
         } catch (IOException e) {
             logger.error("Failed to shutdown server gracefully!");
-            throw new RuntimeException(e);
+            throw new ServerException("Failed to shutdown server gracefully!", e);
         }
         logger.info("Server shutdown");
     }

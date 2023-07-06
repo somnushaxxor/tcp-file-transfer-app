@@ -1,9 +1,10 @@
-package ru.nsu.fit.kolesnik.tcpfiletransferapp.server;
+package ru.nsu.fit.kolesnik.tcpfiletransferapp.server.handler;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessage;
 import ru.nsu.fit.kolesnik.tcpfiletransferapp.protocol.FileTransferMessageType;
+import ru.nsu.fit.kolesnik.tcpfiletransferapp.server.Server;
 
 import java.io.*;
 import java.net.Socket;
@@ -43,12 +44,12 @@ public class ClientHandler implements Runnable {
     public void run() {
         try (DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
              DataInputStream dataInputStream = new DataInputStream(socket.getInputStream())) {
-            logger.info("Initializing file download from " + socket.getInetAddress().getHostAddress() + "...");
+            logger.info("Initializing file download from {}...", socket.getInetAddress().getHostAddress());
             long requiredBytesNumber = initializeFileDownload(dataInputStream);
             logger.info("File download initialized");
-            scheduledExecutorService.scheduleAtFixedRate(this::countFileDownloadSpeed, SPEED_COUNT_PERIOD,
+            scheduledExecutorService.scheduleAtFixedRate(this::printCurrentFileDownloadSpeed, SPEED_COUNT_PERIOD,
                     SPEED_COUNT_PERIOD, TimeUnit.SECONDS);
-            logger.info("Downloading file from " + socket.getInetAddress().getHostAddress() + "...");
+            logger.info("Downloading file from {}...", socket.getInetAddress().getHostAddress());
             Instant begin = Instant.now();
             boolean fileDownloadedSuccessfully = downloadFile(requiredBytesNumber, dataOutputStream, dataInputStream);
             Instant end = Instant.now();
@@ -61,9 +62,12 @@ public class ClientHandler implements Runnable {
             }
             printAverageDownloadSpeed(begin, end);
         } catch (IOException e) {
-            logger.error("Error occurred while handling client " + socket.getInetAddress().getHostAddress() + "!");
+            logger.error("Error occurred while handling client {}!", socket.getInetAddress().getHostAddress());
             shutdown();
-            throw new RuntimeException(e);
+            throw new ClientHandlerException(
+                    String.format("Error occurred while handling client %s!", socket.getInetAddress().getHostAddress()),
+                    e
+            );
         }
         shutdown();
     }
@@ -75,7 +79,7 @@ public class ClientHandler implements Runnable {
         } catch (IOException e) {
             logger.error("Error occurred while initializing file download!");
             shutdown();
-            throw new RuntimeException(e);
+            throw new ClientHandlerException("Error occurred while initializing file download!", e);
         }
         downloadingFile = createDownloadingFile(initializingMessage.getFileName());
         return initializingMessage.getFileSize();
@@ -91,8 +95,9 @@ public class ClientHandler implements Runnable {
             try {
                 fileCreated = file.createNewFile();
             } catch (IOException e) {
+                logger.error("Error occurred while creating download file!");
                 shutdown();
-                throw new RuntimeException(e);
+                throw new ClientHandlerException("Error occurred while creating downloading file!", e);
             }
             if (i > 0) {
                 prefix = "copy" + i + "_";
@@ -108,7 +113,8 @@ public class ClientHandler implements Runnable {
         try {
             Files.delete(downloadingFile.toPath());
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            logger.error("Error occurred while deleting redundant downloading file!");
+            throw new ClientHandlerException("Error occurred while deleting redundant downloading file!", e);
         }
     }
 
@@ -118,15 +124,14 @@ public class ClientHandler implements Runnable {
             boolean receiving = true;
             while (receiving) {
                 FileTransferMessage message = receiveFileTransferMessage(dataInputStream);
-                switch (message.getType()) {
-                    case DATA -> {
-                        fileOutputStream.write(message.getData());
-                        totalBytesReceived += message.getDataSize();
-                        lock.lock();
-                        bytesReceivedWithinPeriod += message.getDataSize();
-                        lock.unlock();
-                    }
-                    case FIN -> receiving = false;
+                if (message.getType() == FileTransferMessageType.DATA) {
+                    fileOutputStream.write(message.getData());
+                    totalBytesReceived += message.getDataSize();
+                    lock.lock();
+                    bytesReceivedWithinPeriod += message.getDataSize();
+                    lock.unlock();
+                } else if (message.getType() == FileTransferMessageType.FIN) {
+                    receiving = false;
                 }
             }
             if (requiredBytesNumber == totalBytesReceived) {
@@ -138,42 +143,37 @@ public class ClientHandler implements Runnable {
                 return false;
             }
         } catch (IOException e) {
-            logger.error("Failed to download file from " + socket.getInetAddress().getHostAddress() + "!");
+            logger.error("Failed to download file from {}!", socket.getInetAddress().getHostAddress());
             deleteDownloadingFile();
             shutdown();
-            throw new RuntimeException(e);
-        } catch (RuntimeException e) {
-            logger.error("Server internal error occurred!");
-            logger.error("Failed to download file from " + socket.getInetAddress().getHostAddress() + "!");
-            deleteDownloadingFile();
-            shutdown();
-            throw e;
+            throw new ClientHandlerException(
+                    String.format("Failed to download file from %s!", socket.getInetAddress().getHostAddress()), e);
         }
     }
 
-    private void countFileDownloadSpeed() {
+    private void printCurrentFileDownloadSpeed() {
         lock.lock();
-        logger.info("Current file download speed: " + bytesReceivedWithinPeriod / SPEED_COUNT_PERIOD + " bytes/s");
+        logger.info("Current file download speed: {} bytes/s", bytesReceivedWithinPeriod / SPEED_COUNT_PERIOD);
         bytesReceivedWithinPeriod = 0;
         lock.unlock();
     }
 
     private void printAverageDownloadSpeed(Instant begin, Instant end) {
-        logger.info("Average file download speed: "
-                + totalBytesReceived * 1000 / (end.toEpochMilli() - begin.toEpochMilli()) + " bytes/s");
+        long averageDownloadSpeed = totalBytesReceived * 1000 / (end.toEpochMilli() - begin.toEpochMilli());
+        logger.info("Average file download speed: {} bytes/s", averageDownloadSpeed);
     }
 
     private void shutdown() {
         scheduledExecutorService.shutdown();
-        logger.info("Shutting connection with " + socket.getInetAddress().getHostAddress() + " down");
+        logger.info("Shutting connection with {} down", socket.getInetAddress().getHostAddress());
         try {
             socket.close();
         } catch (IOException e) {
-            logger.error("Failed to shutdown connection with " + socket.getInetAddress().getHostAddress()
-                    + " gracefully!");
-            throw new RuntimeException(e);
+            logger.error("Failed to shutdown connection with {} gracefully!",
+                    socket.getInetAddress().getHostAddress());
+            throw new ClientHandlerException("Failed to shutdown connection with {} gracefully!", e);
         }
-        logger.info("Connection with " + socket.getInetAddress().getHostAddress() + " shutdown");
+        logger.info("Connection with {} shutdown", socket.getInetAddress().getHostAddress());
     }
 
 }

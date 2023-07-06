@@ -36,8 +36,9 @@ public class Client {
         try {
             socket = new Socket(serverHostname, serverPort);
         } catch (IOException e) {
-            logger.error("Could not connect to server " + serverHostname + ":" + serverPort + "!");
-            throw new RuntimeException(e);
+            logger.error("Could not connect to server {}:{}!", serverHostname, serverPort);
+            throw new ClientException(
+                    String.format("Could not connect to server %s:%s!", serverHostname, serverPort), e);
         }
         logger.info("Client created successfully");
     }
@@ -60,7 +61,7 @@ public class Client {
         } catch (IOException e) {
             logger.error("Error occurred while starting client!");
             shutdown();
-            throw new RuntimeException(e);
+            throw new ClientException("Error occurred while starting client!", e);
         }
         shutdown();
     }
@@ -74,7 +75,7 @@ public class Client {
         } catch (IOException e) {
             logger.error("Error occurred while initializing file upload!");
             shutdown();
-            throw new RuntimeException(e);
+            throw new ClientException("Error occurred while initializing file upload!", e);
         }
     }
 
@@ -99,7 +100,7 @@ public class Client {
         } catch (IOException e) {
             logger.error("Error occurred while uploading file!");
             shutdown();
-            throw new RuntimeException(e);
+            throw new ClientException("Error occurred while uploading file!", e);
         }
     }
 
@@ -109,7 +110,7 @@ public class Client {
             socket.close();
         } catch (IOException e) {
             logger.error("Failed to shutdown client gracefully!");
-            throw new RuntimeException(e);
+            throw new ClientException("Failed to shutdown client gracefully!", e);
         }
         logger.info("Client shutdown");
     }
